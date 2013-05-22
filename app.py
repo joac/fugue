@@ -17,7 +17,6 @@ class CalibratorApp(QtGui.QWidget):
         self.show()
 
     def paintEvent(self, event):
-        print event.rect()
         qp = self.painter
         qp.begin(self)
         qp.fillRect(self.rect(), QtGui.QColor(0,0,0))
@@ -42,18 +41,16 @@ class CalibratorApp(QtGui.QWidget):
         qp.drawText(QtCore.QPoint(x, y), "(%d, %d)" % (x, y ))
 
     def mouseMoveEvent(self, event):
-        print event.pos()
         self.position = event.pos()
-        self.repaint()
+        self.update()
 
     def mousePressEvent(self, event):
-        print event.pos(), event.button()
         if event.button() == 1:
             self.points.append(event.pos())
+        self.update()
 
 
     def keyReleaseEvent(self, event):
-        print event
         if event.key() == QtCore.Qt.Key_Escape:
             if self.isFullScreen():
                 self.showNormal()
@@ -61,6 +58,19 @@ class CalibratorApp(QtGui.QWidget):
                 self.close()
         elif event.key() == QtCore.Qt.Key_F:
             self.toggle_fullscreen() #toggle fullscreen
+        elif event.key() == QtCore.Qt.Key_Up:
+            self.position += QtCore.QPoint(0, -1)
+        elif event.key() == QtCore.Qt.Key_Down:
+            self.position += QtCore.QPoint(0, 1)
+        elif event.key() == QtCore.Qt.Key_Left:
+            self.position += QtCore.QPoint(-1, 0)
+        elif event.key() == QtCore.Qt.Key_Right:
+            self.position += QtCore.QPoint(1, 0)
+        elif event.key() == QtCore.Qt.Key_Return:
+            self.points.append(QtCore.QPoint(self.position))
+
+        self.update()
+
 
     def toggle_fullscreen(self):
         if self.isFullScreen():
