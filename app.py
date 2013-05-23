@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import cv2
+
 from PyQt4 import QtGui, QtCore
 
 class CalibratorApp(QtGui.QWidget):
@@ -14,13 +16,19 @@ class CalibratorApp(QtGui.QWidget):
         self.points = []
         self.painter = QtGui.QPainter()
         self.setCursor(QtGui.QCursor(QtCore.Qt.BlankCursor))
+        self.sight = QtGui.QPixmap('data/mira.png')
+        self.sight.dh = self.sight.height() / 2
+        self.sight.dw = self.sight.width() / 2
+        self.sight.offset = QtCore.QPoint(self.sight.dw, self.sight.dh)
         self.show()
 
     def paintEvent(self, event):
         qp = self.painter
+        pen = QtGui.QPen(QtGui.QColor(47, 138, 131))
+        pen.setWidth(3)
         qp.begin(self)
         qp.fillRect(self.rect(), QtGui.QColor(0,0,0))
-        qp.setPen(QtGui.QColor(168, 34, 3))
+        qp.setPen(pen)
         qp.setFont(QtGui.QFont('Decorative', 12))
         mouse_x = self.position.x()
         mouse_y = self.position.y()
@@ -29,9 +37,13 @@ class CalibratorApp(QtGui.QWidget):
             self.dibujar_punto(punto.x(), punto.y())
         x_max = event.rect().width()
         y_max = event.rect().height()
-        qp.drawLine(0, mouse_y, x_max, mouse_y  )
-        qp.drawLine(mouse_x, 0, mouse_x, y_max)
-        qp.drawRect(mouse_x - 5, mouse_y - 5, 10, 10)
+
+        qp.drawPixmap(self.position - self.sight.offset, self.sight)
+        qp.drawLine(0, mouse_y, mouse_x - self.sight.dw, mouse_y  )
+        qp.drawLine(mouse_x + self.sight.dw, mouse_y, x_max, mouse_y)
+        qp.drawLine(mouse_x, 0, mouse_x, mouse_y - self.sight.dh)
+        qp.drawLine(mouse_x, mouse_y + self.sight.dh, mouse_x, y_max)
+
         qp.end()
 
     def dibujar_punto(self, x, y):
@@ -73,10 +85,16 @@ class CalibratorApp(QtGui.QWidget):
 
 
     def toggle_fullscreen(self):
+        """Toggles Application Fullscreen"""
         if self.isFullScreen():
             self.showNormal()
         else:
             self.showFullScreen()
+
+    def calculater_camera(self):
+        """Calculates a camera using cv2"""
+        print cv2.calibrateCamera()
+
 
 def main():
 
