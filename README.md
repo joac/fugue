@@ -1,3 +1,4 @@
+![alt text](https://raw.github.com/joac/fugue/master/data/logo.png "Logo")
 # Fugue
 
 Fugue is a projector calibration tool, thats make posible to know its intrinsec an extrinsec parameters.
