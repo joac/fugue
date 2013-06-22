@@ -3,12 +3,21 @@
 
 import sys
 import cv2
+import numpy
 
 from PyQt4 import QtGui, QtCore
+
+JOINTS = [
+    (0, 1), (1, 2), (2, 3),
+    (3, 0), (3, 4), (4, 5),
+    (5, 0), (4, 6), (6, 2),
+    ]
+
 
 class Notify(QtCore.QObject):
 
     newPoint = QtCore.pyqtSignal()
+    undo = QtCore.pyqtSignal()
 
 class ReferenceWidget(QtGui.QDialog):
 
@@ -25,11 +34,6 @@ class ReferenceWidget(QtGui.QDialog):
         border = 20
         self.calibration_points = [QtCore.QPoint(x * n + border , y * n + border) for x, y in self.calibration_points]
         self.current_point = 0
-        self.joints = [
-                (0, 1), (1, 2), (2, 3),
-                (3, 0), (3, 4), (4, 5),
-                (5, 0), (4, 6), (6, 2),
-                ]
         self.show()
 
     def paintEvent(self, event):
@@ -40,7 +44,7 @@ class ReferenceWidget(QtGui.QDialog):
         qp.fillRect(self.rect(), QtGui.QColor(0,0,0))
         # Dimensions
         qp.setPen(pen)
-        for first, second in self.joints:
+        for first, second in JOINTS:
             #Draw poligon using pitagoric triangles
             qp.drawLine(self.calibration_points[first], self.calibration_points[second])
         for n, point in enumerate(self.calibration_points):
@@ -56,6 +60,10 @@ class ReferenceWidget(QtGui.QDialog):
 
     def update_point(self):
         self.current_point += 1
+        self.update()
+
+    def undo(self):
+        self.current_point -= 1
         self.update()
 
 
@@ -92,12 +100,18 @@ class CalibratorDialog(QtGui.QDialog):
         x_max = event.rect().width()
         y_max = event.rect().height()
 
+        if self.all_points_aquired():
+            qp.save()
+            qp.setBrush(QtCore.Qt.white)
+            for first, second in JOINTS:
+                qp.drawLine(self.points[first], self.points[second])
+            qp.restore()
+
         qp.drawPixmap(self.position - self.sight.offset, self.sight)
         qp.drawLine(0, mouse_y, mouse_x - self.sight.dw, mouse_y  )
         qp.drawLine(mouse_x + self.sight.dw, mouse_y, x_max, mouse_y)
         qp.drawLine(mouse_x, 0, mouse_x, mouse_y - self.sight.dh)
         qp.drawLine(mouse_x, mouse_y + self.sight.dh, mouse_x, y_max)
-
         qp.end()
 
     def dibujar_punto(self, x, y):
@@ -105,9 +119,7 @@ class CalibratorDialog(QtGui.QDialog):
         qp.drawLine(x - 5, y - 5, x + 5, y + 5)
         qp.drawLine(x - 5, y + 5, x + 5, y - 5)
         qp.drawText(QtCore.QPoint(x, y), "(%d, %d)" % (x, y ))
-        #self.emit(QtCore.SIGNAL('my_signal()'), )
 
-        #Emito señal
 
     def mouseMoveEvent(self, event):
         self.position = event.pos()
@@ -116,7 +128,7 @@ class CalibratorDialog(QtGui.QDialog):
 
     def mousePressEvent(self, event):
         if event.button() == 1:
-            self.add_point(self.position)
+            self.add_point(QtCore.QPoint(self.position))
         self.update()
 
 
@@ -138,11 +150,26 @@ class CalibratorDialog(QtGui.QDialog):
             self.position += QtCore.QPoint(1, 0)
         elif event.key() == QtCore.Qt.Key_Space:
             self.add_point(QtCore.QPoint(self.position))
+        elif event.key() == QtCore.Qt.Key_Z:
+            self.undo()
         self.update()
 
+    def all_points_aquired(self):
+        return len(self.points) == 7 # FIXME On real calibration scenario, this number is bigger
+
     def add_point(self, point):
-        self.points.append(point)
-        self.n.newPoint.emit()
+        if not self.all_points_aquired():
+            self.points.append(point)
+            self.n.newPoint.emit()
+
+        if self.all_points_aquired():
+            self.calibrate()
+
+
+    def undo(self):
+        if self.points:
+            self.points = self.points[:-1]
+            self.n.undo.emit()
 
 
     def toggle_fullscreen(self):
@@ -152,9 +179,43 @@ class CalibratorDialog(QtGui.QDialog):
         else:
             self.showFullScreen()
 
-    def calculater_camera(self):
-        """Calculates a camera using cv2"""
-        print cv2.calibrateCamera()
+    def calibrate(self):
+        """Calculates a camera using cv2
+            Coordinates of object are in pattern cordinate system
+            In current model of 2x2 points, cube side are equals
+            cordinates are in the form:
+            C1 --- C3
+            |      |
+            |      |
+            C2 --- C4
+
+        """
+        views = [
+                [1, 0, 2, 3],
+                [3, 4, 2, 6],
+                [0, 5, 3, 4],
+                ]
+        object_points = [
+                [[0,0,0], [0, 20,0], [20, 0, 0], [20, 20, 0]],
+                [[0,0,0], [0, 20,0], [20, 0, 0], [20, 20, 0]],
+                [[0,0,0], [0, 20,0], [20, 0, 0], [20, 20, 0]],
+                ]
+
+        object_points = numpy.array(object_points, 'float32')
+        image_point_list = []
+        for view in views:
+            view_list = []
+            for point in view:
+                point = self.points[point]
+                view_list.append([point.x(), point.y()])
+            image_point_list.append(view_list)
+
+        image_points = numpy.array(image_point_list, 'float32')
+
+        retval, camera_matrix, dist_coeff, _, _ = cv2.calibrateCamera(
+                object_points, image_points, (640, 480)
+                )
+
 
 
 class PanelWidget(QtGui.QWidget):
@@ -203,6 +264,7 @@ class PanelWidget(QtGui.QWidget):
             self.calibrator.toggle_fullscreen()
             # Conectar señal a ventana de actualizacion
             self.calibrator.n.newPoint.connect(self.reference.update_point)
+            self.calibrator.n.undo.connect(self.reference.undo)
 
     def obtain_screens(self):
         self.screen_list.clear()
