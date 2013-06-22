@@ -54,6 +54,10 @@ class ReferenceWidget(QtGui.QDialog):
             qp.restore()
         qp.end()
 
+    def update_point(self):
+        self.current_point += 1
+        self.update()
+
 
 class CalibratorDialog(QtGui.QDialog):
 
@@ -198,7 +202,7 @@ class PanelWidget(QtGui.QWidget):
             self.calibrator.move(screen_geometry.top(), screen_geometry.left())
             self.calibrator.toggle_fullscreen()
             # Conectar señal a ventana de actualizacion
-           # self.calibrator.signal.connect(self.view)
+            self.calibrator.n.newPoint.connect(self.reference.update_point)
 
     def obtain_screens(self):
         self.screen_list.clear()
