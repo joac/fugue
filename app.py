@@ -6,13 +6,61 @@ import cv2
 
 from PyQt4 import QtGui, QtCore
 
-class CalibratorApp(QtGui.QWidget):
+class Notify(QtCore.QObject):
 
-    def __init__(self, model):
-        super(CalibratorApp, self).__init__()
+    newPoint = QtCore.pyqtSignal()
+
+class ReferenceWidget(QtGui.QDialog):
+
+    def __init__(self, parent):
+        super(ReferenceWidget, self).__init__(parent, QtCore.Qt.Dialog)
+        self.painter = QtGui.QPainter()
+        self.setWindowTitle('Reference')
+        self.calibration_points = [
+                (0, 3), (4, 0), (8, 3),
+                (4, 6), (4, 11), (0, 8),
+                (8, 8)
+                ]
+        n = 20
+        border = 20
+        self.calibration_points = [QtCore.QPoint(x * n + border , y * n + border) for x, y in self.calibration_points]
+        self.current_point = 0
+        self.joints = [
+                (0, 1), (1, 2), (2, 3),
+                (3, 0), (3, 4), (4, 5),
+                (5, 0), (4, 6), (6, 2),
+                ]
+        self.show()
+
+    def paintEvent(self, event):
+        qp = self.painter
+        pen = QtGui.QPen(QtGui.QColor(47, 138, 131))
+        pen.setWidth(3)
+        qp.begin(self)
+        qp.fillRect(self.rect(), QtGui.QColor(0,0,0))
+        # Dimensions
+        qp.setPen(pen)
+        for first, second in self.joints:
+            #Draw poligon using pitagoric triangles
+            qp.drawLine(self.calibration_points[first], self.calibration_points[second])
+        for n, point in enumerate(self.calibration_points):
+            qp.save()
+            if n == self.current_point:
+                qp.setBrush(QtCore.Qt.darkRed)
+            else:
+                qp.setBrush(QtCore.Qt.black)
+
+            qp.drawEllipse(point, 10, 10)
+            qp.restore()
+        qp.end()
+
+
+class CalibratorDialog(QtGui.QDialog):
+
+    def __init__(self, model, parent):
+        super(CalibratorDialog, self).__init__(parent, QtCore.Qt.Dialog)
         self.position = QtCore.QPoint(0 , 0)
         self.setWindowTitle('Calibrator - %s' % model)
-        self.setMouseTracking(True)
         self.points = []
         self.painter = QtGui.QPainter()
         self.setCursor(QtGui.QCursor(QtCore.Qt.BlankCursor))
@@ -21,6 +69,8 @@ class CalibratorApp(QtGui.QWidget):
         self.sight.dw = self.sight.width() / 2
         self.sight.offset = QtCore.QPoint(self.sight.dw, self.sight.dh)
         self.show()
+        self.setMouseTracking(True)
+        self.n = Notify()
 
     def paintEvent(self, event):
         qp = self.painter
@@ -59,9 +109,10 @@ class CalibratorApp(QtGui.QWidget):
         self.position = event.pos()
         self.update()
 
+
     def mousePressEvent(self, event):
         if event.button() == 1:
-            self.points.append(event.pos())
+            self.add_point(self.position)
         self.update()
 
 
@@ -81,10 +132,13 @@ class CalibratorApp(QtGui.QWidget):
             self.position += QtCore.QPoint(-1, 0)
         elif event.key() == QtCore.Qt.Key_Right:
             self.position += QtCore.QPoint(1, 0)
-        elif event.key() == QtCore.Qt.Key_Return:
-            self.points.append(QtCore.QPoint(self.position))
-
+        elif event.key() == QtCore.Qt.Key_Space:
+            self.add_point(QtCore.QPoint(self.position))
         self.update()
+
+    def add_point(self, point):
+        self.points.append(point)
+        self.n.newPoint.emit()
 
 
     def toggle_fullscreen(self):
@@ -134,12 +188,15 @@ class PanelWidget(QtGui.QWidget):
     def calibrate(self):
         target_screen =  self.screen_list.currentIndex()
         target_name =  self.screen_list.itemText(target_screen)
+        screen_geometry = self.desktop_widget.screenGeometry(target_screen)
         print target_screen, target_name
         text, ok = QtGui.QInputDialog.getText(self, 'Projector Name', 'Enter projector model:')
         if ok:
             #FIXME Save calibration data of Projector
-
-            self.calibrator = CalibratorApp(text)
+            self.reference = ReferenceWidget(self)
+            self.calibrator = CalibratorDialog(text, self)
+            self.calibrator.move(screen_geometry.top(), screen_geometry.left())
+            self.calibrator.toggle_fullscreen()
             # Conectar señal a ventana de actualizacion
            # self.calibrator.signal.connect(self.view)
 
